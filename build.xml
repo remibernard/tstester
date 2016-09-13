@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project name="tstester" default="build" basedir=".">
+  <property name="package" value="tstester"/>
+  <property name="version" value="0.1"/>
+  <property name="package.name" value="${package}-${version}"/>
+
+  <property name="src.dir" value="src"/>
+  <property name="classes.dir" value="classes"/>
+  <property name="lib.dir" value="lib"/>
+  <property name="bin.dir" value="bin"/>
+
+  <property name="typesystem.grammar" value="typesystem.sablecc"/>
+  <property name="typesystem.out" value="tstester/sablecc/rgrammar"/>
+  <property name="sablecc.jar" value="sablecc-3.7.jar"/>
+
+  <target name="build">
+    <mkdir dir="${classes.dir}"/>
+    <java jar="${lib.dir}/${sablecc.jar}" fork="true">
+      <arg value="${src.dir}/${typesystem.grammar}"/>
+    </java>
+    <javac destdir="${classes.dir}" debug="true">
+      <src path="${src.dir}"/>
+      <classpath refid="classpath"/>
+      <compilerarg value="-Xlint:all"/>
+    </javac>
+    <copy todir="${classes.dir}">
+      <fileset dir="${src.dir}">
+        <include name="**/*.dat"/>
+        <include name="**/*.txt"/>
+      </fileset>
+    </copy>
+  </target>
+
+  <target name="jar" depends="build">
+    <mkdir dir="${bin.dir}"/>
+    <jar destfile="${bin.dir}/${package.name}.jar" basedir="${classes.dir}"/>
+  </target>
+
+  <target name="clean">
+    <delete dir="${classes.dir}"/>
+    <delete dir="${bin.dir}"/>
+    <delete dir="${src.dir}/${typesystem.out}"/>
+  </target>
+
+  <path id="classpath">
+    <fileset dir="${lib.dir}" includes="**/*.jar"/>
+  </path>
+</project>

@@ -1,0 +1,331 @@
+Package tstester.sablecc.rgrammar;
+
+Helpers
+  all     = [0..0xffff];
+  letter  = [['a'..'z'] + ['A'..'Z']];
+  digit   = ['0'..'9'];
+  newline = 10;
+  space   = 32;
+  tab     = 9;
+  cr      = 13;
+
+Tokens
+  comma =   ',';
+  colon =   ':';
+  scolon =  ';';
+  arrow =   '->';
+  line  =   '--';
+  dot =     '.';
+  hash =    '#';
+  dollar =  '$';
+  percent = '%';
+  quote =   ''';
+
+  o_paren =   '(';
+  c_paren =   ')';
+  o_brace =   '{';
+  c_brace =   '}';
+  o_angle =   '<';
+  c_angle =   '>';
+  o_bracket = '[';
+  c_bracket = ']';
+
+  add_kw     = 'add';
+  base_kw    = 'base';
+  clear_kw   = 'clear';
+  for_kw     = 'for';
+  forall_kw  = 'forall';
+  in_kw      = 'in';
+  is_kw      = 'is';
+  literal_kw = 'literal';
+  on_kw      = 'on';
+  option_kw  = 'option';
+  scope_kw   = 'scope';
+  shadow_kw  = 'shadow';
+  to_kw      = 'to';
+  using_kw   = 'using';
+  where_kw   = 'where';
+  with_kw    = 'with';
+
+  identifier = ('_' | letter) ('_' | '-' | digit | letter)*;
+  number =     digit+;
+
+  blank =   (newline | cr | space | tab)+;
+  comment = '#' [all - newline]* newline cr?;
+
+Ignored Tokens
+  blank,
+  comment;
+
+Productions
+  type_system_spec {-> type_system_spec} =
+    option* basic_types rule*
+    {-> New type_system_spec([option], [basic_types.identifier], [rule])}
+  ;
+
+  option {-> option} =
+    option_kw [key]:identifier [val]:identifier scolon
+    {-> New option(key, val) }
+  ;
+
+  basic_types {-> identifier*} =
+    base_kw ids scolon
+    {-> [ids.identifier]}
+  ;
+
+  rule {-> rule} =
+    {type_rule} context? quantifiers? colon token* result modifier* scolon
+    {-> New rule.type_rule(context, [quantifiers.quantifier], result, [token], [modifier])}
+  | {type_literal} context? quantifiers? literal_kw env_expr colon token* modifier* scolon
+    {-> New rule.type_literal(context, [quantifiers.quantifier], env_expr.expr, [token], [modifier])}
+  ;
+
+  context {-> context} =
+    ctxt_expr pids?
+    {-> New context(ctxt_expr.identifier, [pids.identifier])}
+  ;
+
+  // Quantifiers
+  quantifiers {-> quantifier*} =
+    {single} quantifier
+    {-> [quantifier]}
+  | {multiple} quantifier comma quantifiers
+    {-> [quantifier, quantifiers.quantifier]}
+  ;
+
+  quantifier {-> quantifier} =
+    forall_kw in_clauses condition?
+    {-> New quantifier([in_clauses.in_clause], condition)}
+  ;
+
+  in_clauses {-> in_clause*} =
+    {single} in_clause
+    {-> [in_clause]}
+  | {multiple} o_paren in_clause_list c_paren
+    {-> [in_clause_list.in_clause]}
+  ;
+
+  in_clause_list {-> in_clause*} =
+    {single} in_clause
+    {-> [in_clause]}
+  | {multiple} in_clause comma in_clause_list
+    {-> [in_clause, in_clause_list.in_clause]}
+  ;
+
+  in_clause {-> in_clause} =
+    identifier in_kw env_expr
+    {-> New in_clause(identifier, env_expr.expr)}
+  ;
+
+  condition {-> condition} =
+    where_kw [lhs]:env_expr is_kw [rhs]:env_expr
+    {-> New condition(lhs.expr, rhs.expr)}
+  ;
+
+  // Tokens and result type
+  token {-> token} =
+    {production} identifier
+    {-> New token.production(identifier)}
+  | {prod_ref} o_paren env_expr c_paren
+    {-> New token.prod_ref(env_expr.expr)}
+  | {typed_value} o_angle env_expr c_angle
+    {-> New token.typed_value(env_expr.expr)}
+  | {type_literal} o_bracket env_expr c_bracket
+    {-> New token.type_literal(env_expr.expr)}
+  ;
+
+  result {-> result} =
+    {untyped} line
+    {-> New result(Null, Null)}
+  | {typed} arrow result_production? env_expr
+    {-> New result(result_production.identifier, env_expr.expr)}
+  ;
+
+  result_production {-> identifier} =
+    o_paren identifier c_paren
+    {-> identifier}
+  ;
+
+  // Expressions
+  ctxt_expr {-> identifier} =
+    percent identifier
+    {-> identifier}
+  ;
+
+  env_expr {-> expr} =
+    {identifier} identifier
+    {-> New expr.identifier(identifier)}
+  | {literal} quote identifier
+    {-> New expr.literal(identifier)}
+  | {direct_access} env_expr dot identifier
+    {-> New expr.direct_access(env_expr.expr, identifier)}
+  | {indirect_access} [map]:env_expr o_bracket [key]:env_expr c_bracket
+    {-> New expr.indirect_access(map.expr, key.expr)}
+  ;
+
+  prod_expr {-> expr} =
+    {production} identifier
+    {-> New expr.identifier(identifier)}
+  | {prod_index} dollar number
+    {-> New expr.prod_index(number)}
+  ;
+
+  full_expr {-> expr} =
+    {env_expr} env_expr
+    {-> env_expr.expr}
+  | {prod_index} dollar number
+    {-> New expr.prod_index(number)}
+  | {function_call} identifier o_paren args? c_paren
+    {-> New expr.function_call(identifier, [args.expr])}
+  ;
+
+  // Rule modifiers
+  modifier {-> modifier} =
+    {add_modifier} add_kw [key]:full_expr to_kw [map]:full_expr with_kw properties?
+    {-> New modifier.add_modifier(map.expr, key.expr, [properties.property])}
+  | {scope_modifier} scope_kw prod_pargs o_brace scope_stmt+ c_brace
+    {-> New modifier.scope_modifier([prod_pargs.expr], [scope_stmt])}
+  | {context_modifier} using_kw ctxt_expr pargs? on_kw prod_pargs for_kw identifier
+    {-> New modifier.context_modifier(ctxt_expr.identifier, [pargs.expr], [prod_pargs.expr], identifier)}
+  ;
+
+  properties {-> property*} =
+    o_brace prop_list c_brace
+    {-> [prop_list.property]}
+  ;
+
+  prop_list {-> property*} =
+    {single} property
+    {-> [property]}
+  | {multiple} property comma prop_list
+    {-> [property, prop_list.property]}
+  ;
+
+  property {-> property} =
+    identifier colon full_expr
+    {-> New property(identifier, full_expr.expr)}
+  ;
+
+  scope_stmt {-> scope_stmt} =
+    {clear} clear_kw env_expr scolon
+    {-> New scope_stmt.clear(env_expr.expr)}
+  | {shadow} shadow_kw env_expr scolon
+    {-> New scope_stmt.shadow(env_expr.expr)}
+  ;
+
+  // Argument/parameter lists
+  args {-> expr*} =
+    arg_list
+    {-> [arg_list.expr]}
+  ;
+
+  pargs {-> expr*} =
+    o_paren arg_list c_paren
+    {-> [arg_list.expr]}
+  ;
+
+  arg_list {-> expr*} =
+    {single} full_expr
+    {-> [full_expr.expr]}
+  | {multiple} full_expr comma arg_list
+    {-> [full_expr.expr, arg_list.expr]}
+  ;
+
+  prod_args {-> expr*} =
+    prod_arg_list
+    {-> [prod_arg_list.expr]}
+  ;
+
+  prod_pargs {-> expr*} =
+    o_paren prod_arg_list c_paren
+    {-> [prod_arg_list.expr]}
+  ;
+
+  prod_arg_list {-> expr*} =
+    {single} prod_expr
+    {-> [prod_expr.expr]}
+  | {multiple} prod_expr comma prod_arg_list
+    {-> [prod_expr.expr, prod_arg_list.expr]}
+  ;
+
+  ids {-> identifier*} =
+    id_list
+    {-> [id_list.identifier]}
+  ;
+
+  pids {-> identifier*} =
+    o_paren id_list c_paren
+    {-> [id_list.identifier]}
+  ;
+
+  id_list {-> identifier*} =
+    {single} identifier
+    {-> [identifier]}
+  | {multiple} identifier comma id_list
+    {-> [identifier, id_list.identifier]}
+  ;
+
+Abstract Syntax Tree
+  type_system_spec =
+    option* [basic_types]:identifier* rule*
+  ;
+
+  option =
+    [key]:identifier [val]:identifier
+  ;
+
+  rule =
+    {type_rule} context? quantifier* result token* modifier*
+  | {type_literal} context? quantifier* [type]:expr token* modifier*
+  ;
+
+  context =
+    [name]:identifier [params]:identifier*
+  ;
+
+  quantifier =
+    in_clause* condition?
+  ;
+
+  in_clause =
+    [var]:identifier [set]:expr
+  ;
+
+  condition =
+    [lhs]:expr [rhs]:expr
+  ;
+
+  result =
+    [token]:identifier? [type]:expr?
+  ;
+
+  token =
+    {production} identifier
+  | {prod_ref} expr
+  | {typed_value} expr
+  | {type_literal} expr
+  ;
+
+  modifier =
+    {add_modifier} [map]:expr [key]:expr property*
+  | {scope_modifier} [tokens]:expr* scope_stmt*
+  | {context_modifier} [context]:identifier [args]:expr* [tokens]:expr* [type]:identifier
+  ;
+
+  property =
+    [key]:identifier [value]:expr
+  ;
+
+  scope_stmt =
+    {clear} expr
+  | {shadow} expr
+  ;
+
+  expr =
+    {identifier} identifier
+  | {literal} identifier
+  | {direct_access} [map]:expr [key]:identifier
+  | {indirect_access} [map]:expr [key]:expr
+  | {prod_index} number
+  | {function_call} [func]:identifier [args]:expr*
+  ;

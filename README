@@ -1,0 +1,6 @@
+TSTester is a SableCC-based utility to automatically generate test cases to
+test a compiler's type system based on a specification and the language's
+grammar.
+
+Currently a work-in-progress, although the basic functionality is operational.
+Build with `ant build`.

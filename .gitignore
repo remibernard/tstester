@@ -1,0 +1,11 @@
+# hidden files & IDEA project files
+/.*
+!/.gitignore
+/*.iml
+
+# output directories
+/out
+/classes
+
+# generated code
+/src/tstester/sablecc
